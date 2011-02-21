@@ -1,0 +1,198 @@
+// These are l42's data structures, based on DataDraw's
+
+module Database db
+
+enum VariableType VAR_
+    INT
+    UINT
+    FLOAT
+    DOUBLE
+    BIT
+    BOOL
+    CHAR
+    ENUM
+    POINTER
+    SYM
+    COMPLEX_FLOAT
+    COMPLEX_DOUBLE
+    VALUE
+    UNBOUND
+
+enum MemoryStyle MEM_
+    OBJECT
+    VALUE
+
+// This just gives us a way to keep track of top level data structures
+class Root create_only
+
+class Modpath
+
+class Module
+    sym prefixSym
+
+// Helper class to break many-to-many relationship between modules and modules they import
+class Link
+
+class Enum
+
+class Entry
+    uint32 value
+
+class Class
+    MemoryStyle memoryStyle
+    uint8 referenceSize
+    sym baseClassSym
+
+class Variable
+    VariableType type
+    sym name
+    bool Array
+    Variable firstElementVariable // Used only for arrays
+    Variable numElementsVariable // Used only for arrays
+    bool hidden // We hide some generated fields from users
+    union type
+	Enum enumVar: ENUM
+	Class classVar: POINTER VALUE
+	sym typeSym: SYM // This is only used during parsing, to allow for forward references
+	uint8 width: INT UINT
+    uint32 line // This is set in parsing so we can report a line number in binding errors
+    array uint8 value // Used to keep track of interactive assignments
+
+class Union
+    sym propertySym
+    Variable typeVariable
+    uint32 line // This is set in parsing so we can report a line number in binding errors
+    uint16 number // This is used rather than a name, since unions are not named
+
+class Case
+    sym entrySym // Used in binding to an entry
+
+relationship Root Modpath hashed mandatory
+relationship Root Module hashed child_only mandatory
+
+relationship Module Class hashed mandatory
+relationship Module Enum hashed mandatory
+relationship Module:Import Link:Import tail_linked mandatory
+relationship Module:Export Link:Export tail_linked mandatory
+
+relationship Class Variable doubly_linked cascade
+relationship Class Variable:freeList child_only
+relationship Class:base Class:derived tail_linked mandatory
+relationship Class Union tail_linked mandatory
+
+relationship Enum Entry hashed mandatory
+
+relationship Entry Case tail_linked mandatory
+
+relationship Union Variable tail_linked
+
+relationship Variable Case tail_linked mandatory
+
+schema Function
+
+enum StatementType
+    ASSIGN
+    CLASS
+    DEF
+    DEL
+    IF
+    IMPORT
+    ELIF
+    ELSE
+    EXPRESSION
+    DO
+    WHILE
+    RETURN
+    VARIABLE
+    BLOCK // Only used for Root level statement to contain a file's statements
+
+enum ExpressionType EXPR_
+    OR
+    AND
+    NOT
+    LESS_THAN
+    GREATER_THAN
+    EQUAL
+    GREATER_OR_EQUAL
+    LESS_OR_EQUAL
+    NOT_EQUAL
+    BITOR
+    BITXOR
+    BITAND
+    SHIFT_LEFT
+    SHIFT_RIGHT
+    ADD
+    SUBTRACT
+    MULTIPLY
+    DIVIDE
+    MODULUS
+    NEGATE
+    POWER
+    INDEX
+    DOT
+
+class Function
+    sym name
+
+class Block
+
+class Statement
+    StatementType type
+    union type
+        AssignStatement assignStatement cascade: ASSIGN
+        ClassStatement classStatement cascade: CLASS
+        DefStatement defStatement cascade: DEF
+        VariableStatement variableStatement cascade: VARIABLE
+
+class AssignStatement
+    ExpressionType type
+    Expression leftExpression cascade
+
+class ClassStatement
+    sym Name
+    sym BaseClassName
+
+class DefStatement
+    sym Name
+
+class VariableStatement
+    Variable variable
+
+class Expression
+    ExpressionType type
+
+relationship Module Block:Top child_only
+relationship Module Block doubly_linked mandatory
+
+relationship Block Statement doubly_linked mandatory
+relationship Block Function doubly_linked cascade
+relationship Block Class doubly_linked cascade
+relationship Block Variable doubly_linked cascade
+
+relationship Statement Block child_only cascade
+relationship Statement Expression child_only cascade
+relationship Statement AssignStatement parent_only
+relationship Statement DefStatement parent_only
+relationship Statement ClassStatement parent_only
+relationship Statement VariableStatement parent_only
+
+relationship Class Block child_only cascade
+
+relationship Function Variable:Return cascade
+relationship Function Variable:Param hashed cascade
+relationship Function block child_only cascade
+
+relationship Expression Expression doubly_linked cascade 
+
+schema Parser
+
+class Rule
+
+class Token
+
+schema Compile
+
+// A compiled shared library
+class Cobj
+
+class Cfunc
