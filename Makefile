@@ -8,5 +8,8 @@ dbdatabase.o: dbdatabase.c dbdatabase.h
 
 dbdatabase.c: dbdatabase.h
 
-dbdatabase.h: Database.dd
+dbdatabase.h: Database.dd dbtypedef.h
 	datadraw Database.dd
+
+clean:
+	rm -f *.o *database.[ch] l42

@@ -2,6 +2,8 @@
 
 module Database db
 
+typedef VoidPtr="NULL"
+
 enum VariableType VAR_
     INT
     UINT
@@ -30,9 +32,6 @@ class Modpath
 class Module
     sym prefixSym
 
-// Helper class to break many-to-many relationship between modules and modules they import
-class Link
-
 class Enum
 
 class Entry
@@ -45,7 +44,6 @@ class Class
 
 class Variable
     VariableType type
-    sym name
     bool Array
     Variable firstElementVariable // Used only for arrays
     Variable numElementsVariable // Used only for arrays
@@ -56,7 +54,7 @@ class Variable
 	sym typeSym: SYM // This is only used during parsing, to allow for forward references
 	uint8 width: INT UINT
     uint32 line // This is set in parsing so we can report a line number in binding errors
-    array uint8 value // Used to keep track of interactive assignments
+    array char value // Used to keep track of interactive assignments in JSON-like format
 
 class Union
     sym propertySym
@@ -68,19 +66,12 @@ class Case
     sym entrySym // Used in binding to an entry
 
 relationship Root Modpath hashed mandatory
-relationship Root Module hashed child_only mandatory
+relationship Root Module hashed mandatory
 
-relationship Module Class hashed mandatory
-relationship Module Enum hashed mandatory
-relationship Module:Import Link:Import tail_linked mandatory
-relationship Module:Export Link:Export tail_linked mandatory
-
-relationship Class Variable doubly_linked cascade
 relationship Class Variable:freeList child_only
 relationship Class:base Class:derived tail_linked mandatory
-relationship Class Union tail_linked mandatory
 
-relationship Enum Entry hashed mandatory
+relationship Enum Entry doubly_linked mandatory
 
 relationship Entry Case tail_linked mandatory
 
@@ -90,7 +81,7 @@ relationship Variable Case tail_linked mandatory
 
 schema Function
 
-enum StatementType
+enum StatementType STATE_
     ASSIGN
     CLASS
     DEF
@@ -102,9 +93,10 @@ enum StatementType
     EXPRESSION
     DO
     WHILE
+    MODULE
     RETURN
     VARIABLE
-    BLOCK // Only used for Root level statement to contain a file's statements
+    UNION
 
 enum ExpressionType EXPR_
     OR
@@ -132,7 +124,6 @@ enum ExpressionType EXPR_
     DOT
 
 class Function
-    sym name
 
 class Block
 
@@ -161,26 +152,29 @@ class VariableStatement
 class Expression
     ExpressionType type
 
-relationship Module Block:Top child_only
+relationship Module Block:Top
 relationship Module Block doubly_linked mandatory
 
 relationship Block Statement doubly_linked mandatory
-relationship Block Function doubly_linked cascade
-relationship Block Class doubly_linked cascade
-relationship Block Variable doubly_linked cascade
+relationship Block Function hashed mandatory
+relationship Block Class hashed mandatory
+relationship Block Variable hashed mandatory
+relationship Block Union doubly_linked mandatory
+relationship Block Enum hashed mandatory
+relationship Block Entry hashed mandatory
 
-relationship Statement Block child_only cascade
-relationship Statement Expression child_only cascade
+relationship Statement Block:Inner cascade
+relationship Statement Expression cascade
 relationship Statement AssignStatement parent_only
 relationship Statement DefStatement parent_only
 relationship Statement ClassStatement parent_only
 relationship Statement VariableStatement parent_only
 
-relationship Class Block child_only cascade
+relationship Class Block cascade
 
 relationship Function Variable:Return cascade
 relationship Function Variable:Param hashed cascade
-relationship Function block child_only cascade
+relationship Function Block cascade
 
 relationship Expression Expression doubly_linked cascade 
 
@@ -193,6 +187,10 @@ class Token
 schema Compile
 
 // A compiled shared library
-class Cobj
+class Sharedlib
+    
+class Func
+    VoidPtr funcPtr
 
-class Cfunc
+relationship Root Sharedlib hashed
+relationship Sharedlib Func hashed mandatory

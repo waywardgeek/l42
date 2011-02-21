@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include "db.h"
 
+// Read enough text to compile one statement.
+static char *readText(void)
+{
+    return NULL; //temp: Do this
+}
+
 // The read-compile-run loop.
 static void readCompileRunLoop(void)
 {
@@ -8,7 +14,6 @@ static void readCompileRunLoop(void)
     dbBlock block = dbModuleGetTopBlock(interactiveModule);
     dbStatement statement;
     dbSharedlib sharedlib;
-    dbVariable returnValue;
     char *text;
 
     while(1) {
@@ -16,11 +21,8 @@ static void readCompileRunLoop(void)
         statement = dbParseStatement(block, text);
         if(dbStatementExecutable(statement)) {
             sharedlib = dbCompileStatement(statement);
-            returnValue = dbExecuteLibraryFunction(sharedLib, "main", 0, NULL);
-            if(returnValue != dbVariableNull) {
-                dbVariableDestroy(returnValue);
-            }
-            dbFinstDestroy(finst);
+            dbExecuteLibraryFunction(sharedlib, "main", 0, NULL);
+            dbSharedlibDestroy(sharedlib);
         }
     }
 }
