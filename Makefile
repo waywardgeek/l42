@@ -4,7 +4,8 @@ LFLAGS= -g
 
 SOURCE=main.c \
 dbdatabase.c \
-module.c
+module.c \
+read.c
 
 OBJS=$(patsubst %.c,%.o,$(SOURCE))
 
@@ -13,7 +14,7 @@ all: l42
 l42: depends $(OBJS)
 	gcc $(LFLAGS) -DDD_DEBUG -o l42 $(OBJS) -lddutil-dbg
 
-depends:
+depends: dbdatabase.h dbdatabase.c
 	gcc -MM $(CFLAGS) $(SOURCE) > depends
 
 clean:

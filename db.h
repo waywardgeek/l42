@@ -13,7 +13,8 @@ bool dbSharedlibExecuteFunction(dbSharedlib sharedlib, char *functionName, int a
 // Compiler
 dbSharedlib dbCompileStatement(dbStatement statement);
 
-// Parser
+// Reader/writer
 char *dbReadText(bool interactive);
+extern bool dbInteractiveMode;
 
 extern dbRoot dbTheRoot;

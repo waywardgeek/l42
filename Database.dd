@@ -23,7 +23,8 @@ enum VariableType VAR_
     UNBOUND
 
 enum MemoryStyle MEM_
-    OBJECT
+    FREE_LIST
+    CREATE_ONLY
     VALUE
 
 // This just gives us a way to keep track of top level data structures
@@ -189,45 +190,11 @@ relationship Function Variable:Return cascade
 relationship Function Variable:Param hashed cascade
 relationship Function Block cascade
 
-relationship Operator Expresion doubly_linked mandatory
+relationship Operator Expression doubly_linked mandatory
 
 relationship Expression Expression doubly_linked cascade 
 
-schema Parser
-
-enum TokenType TOKEN_
-    KEYWORD
-    NAME
-    EXPRESSION
-    COMMA_EXPRESSIONS
-    ASSIGN_OPERATOR
-    BLOCK
-
-class Rule
-
-class Pattern
-    sym moduleSym
-    sym functionSym
-
-class Token
-    TokenType type
-    bool optional
-    union type
-        sym keywordVal: KEYWORD
-        sym nameVal: NAME
-        Expression expressionVal: EXPRESSION
-        Expression accessExpressionVal: ACCESS_EXPRESSION
-        sym assignOperatorVal: ASSIGN_OPERATOR
-        Block blockVal: BLOCK
-
-relationship Root Rule hashed
-relationship Rule Pattern doubly_linked mandatory
-relationship Pattern Token doubly_linked mandatory
-
 schema Compile
-
-relationship Root Rule hashed
-relationship Rule Token
 
 // A compiled shared library
 class Sharedlib

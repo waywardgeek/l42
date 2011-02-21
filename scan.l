@@ -22,42 +22,42 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
-#include "dv.h"
-#include "dvparse.h"
+#include "db.h"
+#include "dbparse.h"
 
 #define YY_NEVER_INTERACTIVE 1
 #define YY_INPUT(buf,result,max_size) \
-    if((result = dvRead((char *) buf, max_size )) < 0 ) \
+    if((result = dbRead((char *) buf, max_size )) < 0 ) \
         YY_FATAL_ERROR( "input in flex scanner failed" );
 
-bool dvLastWasReturn;
-bool dvEnding;
+bool dbLastWasReturn;
+bool dbEnding;
 
-static int dvRead(char *buf, int maxSize)
+static int dbRead(char *buf, int maxSize)
 {
     int numChars = 0;
     int c;
 
     do {
-        if(dvLastWasReturn) {
+        if(dbLastWasReturn) {
             /* Insert a tab in front of each line to force a character to match */
             c = '\t';
-            dvLastWasReturn = false;
-        } else if(dvEnding) {
+            dbLastWasReturn = false;
+        } else if(dbEnding) {
             c = EOF;
         } else {
-            c = getc(dvFile);
+            c = getc(dbFile);
         }
-        if(!dvEnding && c == EOF) {
+        if(!dbEnding && c == EOF) {
             /* Add a newline at end of file in case the input file is missing it */
             c = '\n';
-            dvEnding = true;
+            dbEnding = true;
         }
         if(c != EOF && c != '\r') {
             *buf++ = c;
             numChars++;
             if(c == '\n') {
-                dvLastWasReturn = true;
+                dbLastWasReturn = true;
             }
         }
     } while(numChars < maxSize && c != EOF);
@@ -96,7 +96,7 @@ static uint16 findIndentDepth(char *string)
     return length;
 }
 
-int dvlexwrap(void)
+int dblexwrap(void)
 {
     return 1;
 }
@@ -109,50 +109,50 @@ int dvlexwrap(void)
 #undef YYLMAX
 #define YYLMAX 4096
 
-static uint16 dvCommentDepth, dvIndentLevels = 0, dvIndentDepth[DV_MAX_INDENT] = {8};
+static uint16 dbCommentDepth, dbIndentLevels = 0, dbIndentDepth[DV_MAX_INDENT] = {8};
 
 static void noDebug(char *foo, ...) {}
 
 %}
 
-%option prefix="dvlex"
+%option prefix="dblex"
 %option outfile="lex.yy.c"
 
 %Start comment
 
 %%
-<INITIAL>^[ \t]*"//".*\n        { dvLineNum++; myDebug("comment line\n"); } /* Single line comment */
-<INITIAL>[ \t]*"//".*\n         { dvLineNum++; myDebug("newline\n"); return '\n'; } /* Tail comment */
+<INITIAL>^[ \t]*"//".*\n        { dbLineNum++; myDebug("comment line\n"); } /* Single line comment */
+<INITIAL>[ \t]*"//".*\n         { dbLineNum++; myDebug("newline\n"); return '\n'; } /* Tail comment */
 <INITIAL>"/*"                   { myDebug("Start block comment...\n");
-                                  dvCommentDepth = 1;
+                                  dbCommentDepth = 1;
                                   BEGIN comment; }
-<comment>"/*"                   { dvCommentDepth++; }
+<comment>"/*"                   { dbCommentDepth++; }
 <comment>"*/"                   { myDebug("End block comment\n");
-                                  dvCommentDepth--;
-                                  if (dvCommentDepth == 0) {
+                                  dbCommentDepth--;
+                                  if (dbCommentDepth == 0) {
                                      BEGIN INITIAL;
                                   } }
 <comment>.                      ;
-<comment>"\n"                   { dvLineNum++; }
+<comment>"\n"                   { dbLineNum++; }
 
 
-<INITIAL>^[ \t]*\n              { dvLineNum++; }
-<INITIAL>^[ \t]+                { uint16 length = findIndentDepth(dvlextext);
-                                  uint16 oldLevels = dvIndentLevels;
-                                  if(length > dvIndentDepth[dvIndentLevels]) {
-                                      dvIndentDepth[++dvIndentLevels] = length;
+<INITIAL>^[ \t]*\n              { dbLineNum++; }
+<INITIAL>^[ \t]+                { uint16 length = findIndentDepth(dblextext);
+                                  uint16 oldLevels = dbIndentLevels;
+                                  if(length > dbIndentDepth[dbIndentLevels]) {
+                                      dbIndentDepth[++dbIndentLevels] = length;
                                       myDebug("KWBEGIN\n");
                                       return KWBEGIN;
-                                  } else if(length < dvIndentDepth[dvIndentLevels]) {
-                                      while(dvIndentLevels > 0 &&
-                                              length != dvIndentDepth[dvIndentLevels]) {
-                                          dvIndentLevels--;
+                                  } else if(length < dbIndentDepth[dbIndentLevels]) {
+                                      while(dbIndentLevels > 0 &&
+                                              length != dbIndentDepth[dbIndentLevels]) {
+                                          dbIndentLevels--;
                                       }
-                                      if(length != 8 && dvIndentLevels == 0) {
-                                          dverror("Mismatched indentation");
+                                      if(length != 8 && dbIndentLevels == 0) {
+                                          dberror("Mismatched indentation");
                                       }
-                                      if(dvIndentLevels + 1 != oldLevels) {
-                                          dvNumEndsRemaining = oldLevels - dvIndentLevels - 1;
+                                      if(dbIndentLevels + 1 != oldLevels) {
+                                          dbNumEndsRemaining = oldLevels - dbIndentLevels - 1;
                                           myDebug("Starting multiple ends...\n");
                                       }
                                       myDebug("KWEND\n");
@@ -165,7 +165,6 @@ static void noDebug(char *foo, ...) {}
 <INITIAL>"attributes"           {myDebug("KWATTRIBUTES\n"); return KWATTRIBUTES;}
 <INITIAL>"bit"                  {myDebug("KWBIT\n"); return KWBIT;}
 <INITIAL>"bool"                 {myDebug("KWBOOL\n"); return KWBOOL;}
-<INITIAL>"cache_together"       {myDebug("KWCACHE_TOGETHER"); return KWCACHE_TOGETHER;}
 <INITIAL>"cascade"              {myDebug("KWCASCADE\n"); return KWCASCADE;}
 <INITIAL>"char"                 {myDebug("KWCHAR\n"); return KWCHAR;}
 <INITIAL>"child_only"           {myDebug("KWCHILD_ONLY\n"); return KWCHILD_ONLY;}
@@ -184,48 +183,42 @@ static void noDebug(char *foo, ...) {}
 <INITIAL>"module"               {myDebug("KWMODULE\n"); return KWMODULE;}
 <INITIAL>"ordered_list"         {myDebug("KWORDERED_LIST\n"); return KWORDERED_LIST;}
 <INITIAL>"parent_only"          {myDebug("KWPARENT_ONLY\n"); return KWPARENT_ONLY;}
-<INITIAL>"persistent"           {myDebug("KWPERSISTENT\n"); return KWPERSISTENT;}
 <INITIAL>"reference_size"       {myDebug("KWREFERENCE_SIZE\n"); return KWREFERENCE_SIZE;}
 <INITIAL>"relationship"         {myDebug("KWRELATIONSHIP\n"); return KWRELATIONSHIP;}
-<INITIAL>"schema"               {myDebug("KWSCHEMA\n"); return KWSCHEMA;}
-<INITIAL>"sparse"               {myDebug("KWSPARSE\n"); return KWSPARSE;}
 <INITIAL>"sym"                  {myDebug("KWSYM\n"); return KWSYM;}
 <INITIAL>"tail_linked"          {myDebug("KWTAIL_LINKED\n"); return KWTAIL_LINKED;}
 <INITIAL>"typedef"              {myDebug("KWTYPEDEF\n"); return KWTYPEDEF;}
-<INITIAL>"undo_redo"            {myDebug("KWUNDO_REDO\n"); return KWUNDO_REDO;}
 <INITIAL>"union"                {myDebug("KWUNION\n"); return KWUNION;}
 <INITIAL>"unordered"            {myDebug("KWUNORDERED\n"); return KWUNORDERED;}
-<INITIAL>"view"                 {myDebug("KWVIEW\n"); return KWVIEW;}
-<INITIAL>"volatile"             {myDebug("KWVOLATILE\n"); return KWVOLATILE;}
 
 <INITIAL>"."                    { myDebug(".\n"); return '.'; }
-<INITIAL>"+"\n                  { myDebug("Line continuation\n"); dvLineNum++; }
-<INITIAL>\n                     { myDebug("newline\n"); dvLineNum++; return '\n'; }
-<INITIAL>[0-9]+                 { dvlval.intVal = atol(dvlextext);
-                                  myDebug("INTEGER %u\n", dvlval.intVal);
+<INITIAL>"+"\n                  { myDebug("Line continuation\n"); dbLineNum++; }
+<INITIAL>\n                     { myDebug("newline\n"); dbLineNum++; return '\n'; }
+<INITIAL>[0-9]+                 { dblval.intVal = atol(dblextext);
+                                  myDebug("INTEGER %u\n", dblval.intVal);
                                   return INTEGER; }
-<INITIAL>int[0-9]*              { if(strlen(dvlextext) == 3) {
-                                      dvlval.intVal = 32;
+<INITIAL>int[0-9]*              { if(strlen(dblextext) == 3) {
+                                      dblval.intVal = 32;
                                   } else {
-                                      dvlval.intVal = atol(dvlextext + 3);
+                                      dblval.intVal = atol(dblextext + 3);
                                   }
-                                  myDebug("INTTYPE %u\n", dvlval.intVal);
+                                  myDebug("INTTYPE %u\n", dblval.intVal);
                                   return INTTYPE; }
-<INITIAL>uint[0-9]*             { if(strlen(dvlextext) == 4) {
-                                      dvlval.intVal = 32;
+<INITIAL>uint[0-9]*             { if(strlen(dblextext) == 4) {
+                                      dblval.intVal = 32;
                                   } else {
-                                      dvlval.intVal = atol(dvlextext + 4);
+                                      dblval.intVal = atol(dblextext + 4);
                                   }
-                                  myDebug("UINTTYPE %u\n", dvlval.intVal);
+                                  myDebug("UINTTYPE %u\n", dblval.intVal);
                                   return UINTTYPE; }
-<INITIAL>[a-zA-Z][a-zA-Z0-9_]*  { myDebug("IDENT %s\n", dvlextext);
-                                  dvlval.symVal = utSymCreate(dvlextext);
+<INITIAL>[a-zA-Z][a-zA-Z0-9_]*  { myDebug("IDENT %s\n", dblextext);
+                                  dblval.symVal = utSymCreate(dblextext);
                                   return IDENT; }
-<INITIAL>\"([^"]|\\.)*\"      { myDebug("STRING %s\n", dvlextext);
-                                  dvlval.stringVal = utSymCreate(unmunge(dvlextext));
+<INITIAL>\"([^"]|\\.)*\"      { myDebug("STRING %s\n", dblextext);
+                                  dblval.stringVal = utSymCreate(unmunge(dblextext));
                                   return STRING; }
-<INITIAL>\[([^\[\]]|\\.)*\]      { myDebug("INDEX %s\n", dvlextext);
-                                  dvlval.indexVal = utSymCreate(unmunge(dvlextext));
+<INITIAL>\[([^\[\]]|\\.)*\]      { myDebug("INDEX %s\n", dblextext);
+                                  dblval.indexVal = utSymCreate(unmunge(dblextext));
                                   return INDEX; }
-<INITIAL>.                      { myDebug("Char '%c'\n", dvlextext[0]);
-                                  return dvlextext[0]; }
+<INITIAL>.                      { myDebug("Char '%c'\n", dblextext[0]);
+                                  return dblextext[0]; }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Bill Cox
+ * Copyright (C) 2006, 2011 Bill Cox
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,26 +18,23 @@
 
 %{
 
-#include "dv.h"
+#include "db.h"
 
-dvModule dvCurrentModule;
-static dvSchema dvCurrentSchema;
-static dvEnum dvCurrentEnum;
-static dvClass dvCurrentClass;
-static dvUnion dvCurrentUnion;
-static dvProperty dvCurrentProperty;
-static dvRelationship dvCurrentRelationship;
-static dvKey dvCurrentKey;
-static dvCache dvCurrentCache;
-static uint32 dvCacheNumber;
-static uint32 dvCurrentEnumValue;
-static uint8 dvIntWidth;
-static uint32 dvUnionNumber;
+dbModule dbCurrentModule;
+static dbEnum dbCurrentEnum;
+static dbClass dbCurrentClass;
+static dbUnion dbCurrentUnion;
+static dbVariable dbCurrentVariable;
+static dbRelationship dbCurrentRelationship;
+static dbKey dbCurrentKey;
+static uint32 dbCurrentEnumValue;
+static uint8 dbIntWidth;
+static uint32 dbUnionNumber;
 
 /*--------------------------------------------------------------------------------------------------
   Provide yyerror function capability.
 --------------------------------------------------------------------------------------------------*/
-void dverror(
+void dberror(
     char *message,
     ...)
 {
@@ -47,81 +44,20 @@ void dverror(
     va_start(ap, message);
     buff = utVsprintf(message, ap);
     va_end(ap);
-    utError("Line %d, token \"%s\": %s", dvLineNum, dvlextext, buff);
+    utError("Line %d, token \"%s\": %s", dbLineNum, dblextext, buff);
 }
 
 /*--------------------------------------------------------------------------------------------------
-  Build a user-defined type property, either an enum or typedef.
+  Build a user-defined type variable, either an enum or class.
 --------------------------------------------------------------------------------------------------*/
-static dvProperty buildUserTypeProperty(
-    dvModule module,
+static dbVariable buildUserTypeVariable(
+    dbModule module,
     utSym typeSym,
     utSym sym)
 {
-    dvProperty property = dvPropertyCreate(dvCurrentClass, dvCurrentUnion, PROP_UNBOUND, sym);
- 
-    dvPropertySetTypeSym(property, typeSym);
-    dvPropertySetLine(property, dvLineNum);
-    if(module != dvCurrentModule && dvLoadModules) {
-        /* Bind it now while we know the module */
-        dvBindProperty(property, module);
-    }
-    return property;
-}
-
-/*--------------------------------------------------------------------------------------------------
-  Default keys are a utSym field called just "Sym".  If no key is provided, create it.  Also create
-  the Sym property on the child if it does not exist.
---------------------------------------------------------------------------------------------------*/
-void dvAddDefaultKey(
-    dvRelationship relationship)
-{
-    dvClass childClass = dvRelationshipGetChildClass(relationship);
-    utSym symName = utSymCreateFormatted("%sSym", dvRelationshipGetChildLabel(relationship));
-    dvProperty symProp = dvClassFindProperty(childClass, symName);
-
-    if(symProp != dvPropertyNull) {
-        if(dvPropertyGetType(symProp) != PROP_SYM) {
-            dverror("The default key \"Sym\" in hashed relationships must be a symbol");
-        }
-    } else {
-        symProp = dvPropertyCreate(childClass, dvUnionNull, PROP_SYM, symName);
-    }
-    /* Move symbol to front, just to improve reading fields */
-    dvClassRemoveProperty(childClass, symProp);
-    dvClassInsertProperty(childClass, symProp);
-    dvPropertySetRelationship(symProp, relationship);
-    dvKeyCreate(relationship, symProp);
-}
-
-%}
-
-%union {
-    utSym symVal;
-    utSym stringVal;
-    utSym indexVal;
-    uint32 intVal;
-    dvPropertyType propTypeVal;
-    dvModule moduleVal;
-    dvRelationshipType relationshipType;
-};
-
-%token <symVal> IDENT
-%token <stringVal> STRING
-%token <indexVal> INDEX
-%token <intVal> INTEGER INTTYPE UINTTYPE
-
-%type <propTypeVal> propertyType
-%type <moduleVal> moduleSpec
-%type <relationshipType> relationshipType
-%type <symVal> optLabel optIdent upperIdent
-
-%token KWARRAY
-%token KWATTRIBUTES
-%token KWBEGIN
+    dbVariable variable = dbVariableCreate(dbCurrentClass, dbCurrentUnion, P
 %token KWBIT
 %token KWBOOL
-%token KWCACHE_TOGETHER
 %token KWCASCADE
 %token KWCHAR
 %token KWCHILD_ONLY
@@ -150,11 +86,8 @@ void dvAddDefaultKey(
 %token KWSYM
 %token KWTAIL_LINKED
 %token KWTYPEDEF
-%token KWUNDO_REDO
 %token KWUNION
 %token KWUNORDERED
-%token KWVIEW
-%token KWVOLATILE
 
 %%
 
@@ -163,32 +96,15 @@ goal: initialize module
 
 initialize: /* Empty */
 {
-    dvCurrentUnion = dvUnionNull;
-    dvCurrentSchema = dvSchemaNull;
+    dbCurrentUnion = dbUnionNull;
 }
 
-module: moduleHeader moduleParameters '\n' moduleStuff
-;
-
-moduleParameters: /* Empty */
-| moduleParameters moduleParameter
-;
-
-moduleParameter: KWVOLATILE
-| KWPERSISTENT
-{
-    dvModuleSetPersistent(dvCurrentModule, true);
-}
-| KWUNDO_REDO
-{
-    dvModuleSetUndoRedo(dvCurrentModule, true);
-}
+module: moduleHeader '\n' moduleStuff
 ;
 
 moduleHeader: KWMODULE upperIdent optIdent
 {
-    dvCurrentModule = dvModuleCreate($2, $3);
-    dvCurrentSchema = dvSchemaNull;
+    dbCurrentModule = dbModuleCreate($2, $3);
 }
 ;
 
@@ -209,17 +125,14 @@ moduleStuff: /* Empty */
 moduleElement: import
 | enum
 | typedef
-| schema
 | class
+| value
 | relationship
 ;
 
 import: KWIMPORT upperIdent '\n'
 {
-    dvModule importModule = dvRootFindModule(dvTheRoot, $2);
-    if(importModule != dvModuleNull) {
-        dvLinkCreate(dvCurrentModule, importModule);
-    }
+//TODO: Create import statement here
 }
 ;
 
@@ -228,8 +141,8 @@ enum: enumHeader KWBEGIN entries KWEND
 
 enumHeader: KWENUM upperIdent optIdent '\n'
 {
-    dvCurrentEnum = dvEnumCreate(dvCurrentModule, $2, $3);
-    dvCurrentEnumValue = 0;
+    dbCurrentEnum = dbEnumCreate(dbCurrentModule, $2, $3);
+    dbCurrentEnumValue = 0;
 }
 ;
 
@@ -239,30 +152,24 @@ entries: entry
 
 entry: IDENT '\n'
 {
-    dvEntryCreate(dvCurrentEnum, $1, dvCurrentEnumValue);
-    dvCurrentEnumValue++;
+    dbEntryCreate(dbCurrentEnum, $1, dbCurrentEnumValue);
+    dbCurrentEnumValue++;
 }
 | IDENT '=' INTEGER '\n'
 {
-    dvCurrentEnumValue = $3;
-    dvEntryCreate(dvCurrentEnum, $1, dvCurrentEnumValue);
-    dvCurrentEnumValue++;
+    dbCurrentEnumValue = $3;
+    dbEntryCreate(dbCurrentEnum, $1, dbCurrentEnumValue);
+    dbCurrentEnumValue++;
 }
 ;
 
 typedef: KWTYPEDEF IDENT '\n'
 {
-    dvTypedefCreate(dvCurrentModule, $2, "0");
+    dbTypedefCreate(dbCurrentModule, $2, "0");
 }
 | KWTYPEDEF IDENT '=' STRING '\n'
 {
-    dvTypedefCreate(dvCurrentModule, $2, utSymGetName($4));
-}
-;
-
-schema: KWSCHEMA upperIdent '\n'
-{
-    dvCurrentSchema = dvSchemaCreate(dvCurrentModule, $2);
+    dbTypedefCreate(dbCurrentModule, $2, utSymGetName($4));
 }
 ;
 
@@ -272,25 +179,36 @@ class: classHeader classOptions '\n' KWBEGIN properties KWEND
 
 classHeader: KWCLASS upperIdent optLabel
 {
-    dvClass baseClass = dvClassNull;
-    dvModule baseModule = dvModuleNull;
-    if($3 != utSymNull && dvLoadModules) {
-        baseModule = dvRootFindModule(dvTheRoot, dvUpperSym($3));
-        if(baseModule == dvModuleNull) {
-            baseModule = dvFindModuleFromPrefix($3);
+    dbClass baseClass = dbClassNull;
+    dbModule baseModule = dbModuleNull;
+    if($3 != utSymNull && dbLoadModules) {
+        baseModule = dbRootFindModule(dbTheRoot, dbUpperSym($3));
+        if(baseModule == dbModuleNull) {
+            baseModule = dbFindModuleFromPrefix($3);
         }
-        if(baseModule == dvModuleNull) {
-            dverror("Undefined module %s", utSymGetName($3));
+        if(baseModule == dbModuleNull) {
+            dberror("Undefined module %s", utSymGetName($3));
         }
-        baseClass = dvModuleFindClass(baseModule, $2);
-        if(baseClass == dvClassNull) {
-            dverror("Base class %s not defined in module %s", utSymGetName($2), utSymGetName($3));
+        baseClass = dbModuleFindClass(baseModule, $2);
+        if(baseClass == dbClassNull) {
+            dberror("Base class %s not defined in module %s", utSymGetName($2), utSymGetName($3));
         }
     }
-    dvCurrentClass = dvClassCreate(dvCurrentModule, $2, baseClass);
-    dvClassSetBaseClassSym(dvCurrentClass, $3);
-    dvUnionNumber = 1;
-    dvCacheNumber = 1;
+    dbCurrentClass = dbClassCreate(dbCurrentModule, $2, baseClass);
+    dbClassSetBaseClassSym(dbCurrentClass, $3);
+    dbUnionNumber = 1;
+    dbCacheNumber = 1;
+}
+;
+
+value: valueHeader '\n' KWBEGIN properties KWEND
+;
+
+valueHeader: KWVALUE upperIdent
+{
+    dbCurrentClass = dbClassCreate(dbCurrentModule, $2, baseClass);
+    dbClassSetMemoryStyle(dbCurrentClass, MEM_VALUE);
+    dbUnionNumber = 1;
 }
 ;
 
@@ -300,107 +218,93 @@ classOptions: /* Empty */
 
 classOption: KWREFERENCE_SIZE INTEGER
 {
-    if($2 & 7) {
-        dverror("Reference sizes may only be 8, 16, 32, or 64");
+    if($2 & 7 || $2 > 64 || $2 < 8) {
+        dberror("Reference sizes may only be 8, 16, 32, or 64");
     }
-    dvClassSetReferenceSize(dvCurrentClass, (uint8)$2);
+    dbClassSetReferenceSize(dbCurrentClass, (uint8)$2);
 }
 | KWFREE_LIST
 {
-    dvClassSetMemoryStyle(dvCurrentClass, MEM_FREE_LIST);
+    dbClassSetMemoryStyle(dbCurrentClass, MEM_FREE_LIST);
 }
 | KWCREATE_ONLY
 {
-    dvClassSetMemoryStyle(dvCurrentClass, MEM_CREATE_ONLY);
-}
-| KWARRAY
-{
-    dvClassSetGenerateArrayClass(dvCurrentClass, true);
-}
-| KWATTRIBUTES
-{
-    dvClassSetGenerateAttributes(dvCurrentClass, true);
-}
-| KWSPARSE
-{
-    dvClassSetSparse(dvCurrentClass, true);
+    dbClassSetMemoryStyle(dbCurrentClass, MEM_CREATE_ONLY);
 }
 ;
 
-properties: property '\n'
+properties: variable '\n'
 | union
-| cacheTogether '\n'
-| properties property '\n'
+| properties variable '\n'
 | properties union
-| properties cacheTogether '\n'
 ;
 
-property: baseProperty propertyAttributes
-| KWARRAY baseProperty propertyAttributes
+variable: baseVariable variableAttributes
+| KWARRAY baseVariable variableAttributes
 {
-    if(dvCurrentUnion != dvUnionNull) {
-        dverror("Arrays are not allowed in unions");
+    if(dbCurrentUnion != dbUnionNull) {
+        dberror("Arrays are not allowed in unions");
     }
-    dvPropertySetArray(dvCurrentProperty, true);
+    dbVariableSetArray(dbCurrentVariable, true);
 }
-| KWARRAY baseProperty INDEX propertyAttributes
+| KWARRAY baseVariable INDEX variableAttributes
 {
     char *index;
-    if(dvCurrentUnion != dvUnionNull) {
-        dverror("Arrays are not allowed in unions");
+    if(dbCurrentUnion != dbUnionNull) {
+        dberror("Arrays are not allowed in unions");
     }
-    if(dvPropertySparse(dvCurrentProperty)) {
-        dverror("Fixed sized arrays cannot be sparse");
+    if(dbVariableSparse(dbCurrentVariable)) {
+        dberror("Fixed sized arrays cannot be sparse");
     }
-    dvPropertySetArray(dvCurrentProperty, true);
-    dvPropertySetFixedSize(dvCurrentProperty, true);
+    dbVariableSetArray(dbCurrentVariable, true);
+    dbVariableSetFixedSize(dbCurrentVariable, true);
     index = utSymGetName($3);
-    dvPropertySetIndex(dvCurrentProperty, index, strlen(index) + 1);
+    dbVariableSetIndex(dbCurrentVariable, index, strlen(index) + 1);
 }
 ;
 
-propertyAttributes: /* Empty */
-| propertyAttributes propertyAttribute
+variableAttributes: /* Empty */
+| variableAttributes variableAttribute
 ;
 
-propertyAttribute: KWCASCADE
+variableAttribute: KWCASCADE
 {
-    dvPropertySetCascade(dvCurrentProperty, true);
+    dbVariableSetCascade(dbCurrentVariable, true);
 }
 | KWVIEW
 {
-    dvPropertySetView(dvCurrentProperty, true);
+    dbVariableSetView(dbCurrentVariable, true);
 }
 | KWSPARSE
 {
-    if(dvCurrentUnion != dvUnionNull) {
-        dverror("Union fields cannot be sparse");
+    if(dbCurrentUnion != dbUnionNull) {
+        dberror("Union fields cannot be sparse");
     }
-    dvPropertySetSparse(dvCurrentProperty, true);
+    dbVariableSetSparse(dbCurrentVariable, true);
 }
 | '=' STRING
 {
     char *value = utSymGetName($2);
-    dvPropertySetInitializer(dvCurrentProperty, value, strlen(value) + 1);
+    dbVariableSetInitializer(dbCurrentVariable, value, strlen(value) + 1);
 }
 ;
 
-baseProperty: IDENT upperIdent
+baseVariable: IDENT upperIdent
 {
-    dvCurrentProperty = buildUserTypeProperty(dvCurrentModule, $1, $2);
+    dbCurrentVariable = buildUserTypeVariable(dbCurrentModule, $1, $2);
 }
 | moduleSpec IDENT upperIdent
 {
-    dvCurrentProperty = buildUserTypeProperty($1, $2, $3);
+    dbCurrentVariable = buildUserTypeVariable($1, $2, $3);
 }
-| propertyType upperIdent
+| variableType upperIdent
 {
-    dvCurrentProperty = dvPropertyCreate(dvCurrentClass, dvCurrentUnion, $1, $2);
-    if($1 == PROP_INT || $1 == PROP_UINT) {
-        if(dvIntWidth != 8 && dvIntWidth != 16 && dvIntWidth != 32 && dvIntWidth != 64) {
-            dverror("Valid integer widths are 8, 16, 32, and 64");
+    dbCurrentVariable = dbVariableCreate(dbCurrentClass, dbCurrentUnion, $1, $2);
+    if($1 == VAR_INT || $1 == VAR_UINT) {
+        if(dbIntWidth != 8 && dbIntWidth != 16 && dbIntWidth != 32 && dbIntWidth != 64) {
+            dberror("Valid integer widths are 8, 16, 32, and 64");
         }
-        dvPropertySetWidth(dvCurrentProperty, dvIntWidth);
+        dbVariableSetWidth(dbCurrentVariable, dbIntWidth);
     }
 }
 ;
@@ -410,102 +314,102 @@ cacheTogether: cacheTogetherHeader cacheIdents
 
 cacheTogetherHeader: KWCACHE_TOGETHER
 {
-    if(!dvClassRedo(dvCurrentClass)) {
-        dvCurrentCache = dvCacheCreate(dvCurrentClass);
-        dvCacheSetLine(dvCurrentCache, dvLineNum);
-        dvCacheSetNumber(dvCurrentCache, dvCacheNumber);
-        dvCacheNumber++;
+    if(!dbClassRedo(dbCurrentClass)) {
+        dbCurrentCache = dbCacheCreate(dbCurrentClass);
+        dbCacheSetLine(dbCurrentCache, dbLineNum);
+        dbCacheSetNumber(dbCurrentCache, dbCacheNumber);
+        dbCacheNumber++;
     }
 }
 
 cacheIdents: /* Empty */
 | cacheIdents upperIdent
 {
-    if(!dvClassRedo(dvCurrentClass)) {
-        dvPropident propident = dvPropidentAlloc();
-        dvPropidentSetSym(propident, $2);
-        dvCacheAppendPropident(dvCurrentCache, propident);
+    if(!dbClassRedo(dbCurrentClass)) {
+        dbPropident propident = dbPropidentAlloc();
+        dbPropidentSetSym(propident, $2);
+        dbCacheAppendPropident(dbCurrentCache, propident);
     }
 }
 ;
 
 moduleSpec: IDENT ':'
 {
-    dvModule module = dvRootFindModule(dvTheRoot, $1);
-    if(module == dvModuleNull) {
-        module = dvFindModuleFromPrefix($1);
+    dbModule module = dbRootFindModule(dbTheRoot, $1);
+    if(module == dbModuleNull) {
+        module = dbFindModuleFromPrefix($1);
     }
-    if(module == dvModuleNull && dvLoadModules) {
-        dverror("Module %s not found", utSymGetName($1));
+    if(module == dbModuleNull && dbLoadModules) {
+        dberror("Module %s not found", utSymGetName($1));
     }
     $$ = module;
 }
 
-propertyType: INTTYPE
+variableType: INTTYPE
 {
-    dvIntWidth = (uint8)$1;
-    $$ = PROP_INT;
+    dbIntWidth = (uint8)$1;
+    $$ = VAR_INT;
 }
 | UINTTYPE
 {
-    dvIntWidth = (uint8)$1;
-    $$ = PROP_UINT;
+    dbIntWidth = (uint8)$1;
+    $$ = VAR_UINT;
 }
 | KWFLOAT
 {
-    $$ = PROP_FLOAT;
+    $$ = VAR_FLOAT;
 }
 | KWDOUBLE
 {
-    $$ = PROP_DOUBLE;
+    $$ = VAR_DOUBLE;
 }
 | KWBIT
 {
-    if(dvCurrentUnion == dvUnionNull) {
-        $$ = PROP_BIT;
+    if(dbCurrentUnion == dbUnionNull) {
+        $$ = VAR_BIT;
     } else {
-        $$ = PROP_BOOL;
+        $$ = VAR_BOOL;
     }
 }
 | KWBOOL
 {
-    $$ = PROP_BOOL;
+    $$ = VAR_BOOL;
 }
 | KWCHAR
 {
-    $$ = PROP_CHAR;
+    $$ = VAR_CHAR;
 }
 | KWENUM
 {
-    $$ = PROP_ENUM;
+    $$ = VAR_ENUM;
 }
 | KWTYPEDEF
 {
-    $$ = PROP_TYPEDEF;
+    $$ = VAR_TYPEDEF;
 }
 | KWSYM
 {
-    $$ = PROP_SYM;
+    $$ = VAR_SYM;
 }
 ;
 
-union: unionHeader KWBEGIN nonUnionProperties KWEND
+union: unionHeader KWBEGIN nonUnionVariables KWEND
 {
-    if(dvUnionGetFirstProperty(dvCurrentUnion) == dvPropertyNull) {
-        dvUnionDestroy(dvCurrentUnion);
+    if(dbUnionGetFirstVariable(dbCurrentUnion) == dbVariableNull) {
+        dbUnionDestroy(dbCurrentUnion);
     }
-    dvCurrentUnion = dvUnionNull;
+    dbCurrentUnion = dbUnionNull;
 }
 ;
 
 unionHeader: KWUNION upperIdent '\n'
 {
-    dvCurrentUnion = dvUnionCreate(dvCurrentClass, $2, dvUnionNumber++);
+    dbCurrentUnion = dbUnionCreate(dbCurrentClass, $2, dbUnionNumber++);
 }
 ;
 
-nonUnionProperties: property ':' unionCases '\n'
-| nonUnionProperties property ':' unionCases '\n'
+nonUnionVariables: variable ':' unionCases '\n'
+| nonUnionVariables variable ':' unionCases '\n'
 ;
 
 unionCases: unionCase
@@ -514,33 +418,33 @@ unionCases: unionCase
 
 unionCase: IDENT
 {
-    dvCase theCase = dvCaseAlloc();
-    dvCaseSetEntrySym(theCase, $1);
-    dvPropertyAppendCase(dvCurrentProperty, theCase);
+    dbCase theCase = dbCaseAlloc();
+    dbCaseSetEntrySym(theCase, $1);
+    dbVariableAppendCase(dbCurrentVariable, theCase);
 }
 
 relationship: relationshipHeader relationshipType relationshipOptions '\n'
 {
-    dvRelationshipSetType(dvCurrentRelationship, $2);
+    dbRelationshipSetType(dbCurrentRelationship, $2);
 }
 ;
 
 relationshipHeader: KWRELATIONSHIP upperIdent optLabel upperIdent optLabel
 {
-    dvClass parent = dvModuleFindClass(dvCurrentModule, $2);
-    dvClass child = dvModuleFindClass(dvCurrentModule, $4);
-    if(parent == dvClassNull) {
-        dverror("Unknown class %s", utSymGetName($2));
+    dbClass parent = dbModuleFindClass(dbCurrentModule, $2);
+    dbClass child = dbModuleFindClass(dbCurrentModule, $4);
+    if(parent == dbClassNull) {
+        dberror("Unknown class %s", utSymGetName($2));
     }
-    if(child == dvClassNull) {
-        dverror("Unknown class %s", utSymGetName($4));
+    if(child == dbClassNull) {
+        dberror("Unknown class %s", utSymGetName($4));
     }
-    if(dvCurrentSchema == dvSchemaNull) {
-        dvCurrentSchema = dvSchemaCreate(dvCurrentModule, dvModuleGetSym(dvCurrentModule));
+    if(dbCurrentSchema == dbSchemaNull) {
+        dbCurrentSchema = dbSchemaCreate(dbCurrentModule, dbModuleGetSym(dbCurrentModule));
     }
     /* Note that the type is just a place-holder.  We fill in the real type after parsing the type */
-    dvCurrentRelationship = dvRelationshipCreate(dvCurrentSchema, parent, child, REL_UNBOUND,
-        dvUpperSym($3), dvUpperSym($5));
+    dbCurrentRelationship = dbRelationshipCreate(dbCurrentSchema, parent, child, REL_UNBOUND,
+        dbUpperSym($3), dbUpperSym($5));
 }
 ;
 
@@ -585,8 +489,8 @@ relationshipType: /* Empty */
 | KWHASHED key
 {
     $$ = REL_HASHED;
-    if(dvRelationshipGetFirstKey(dvCurrentRelationship) == dvKeyNull) {
-        dvAddDefaultKey(dvCurrentRelationship);
+    if(dbRelationshipGetFirstKey(dbCurrentRelationship) == dbKeyNull) {
+        dbAddDefaultKey(dbCurrentRelationship);
     }
 }
 | KWORDERED_LIST key
@@ -601,44 +505,44 @@ key: /* empty */
 
 keyproperties : upperIdent
 {
-    dvCurrentKey = dvUnboundKeyCreate(dvCurrentRelationship, $1, dvLineNum);
+    dbCurrentKey = dbUnboundKeyCreate(dbCurrentRelationship, $1, dbLineNum);
 }
 | keyproperties '.' upperIdent
 {
-    dvUnboundKeypropertyCreate(dvCurrentKey, $3);
+    dbUnboundKeyvariableCreate(dbCurrentKey, $3);
 }
 ;
 
 relationshipOption: KWCASCADE
 {
-    dvRelationshipSetCascade(dvCurrentRelationship, true);
+    dbRelationshipSetCascade(dbCurrentRelationship, true);
 }
 | KWMANDATORY
 {
-    dvRelationshipSetMandatory(dvCurrentRelationship, true);
-    dvRelationshipSetCascade(dvCurrentRelationship, true);
+    dbRelationshipSetMandatory(dbCurrentRelationship, true);
+    dbRelationshipSetCascade(dbCurrentRelationship, true);
 }
 | KWPARENT_ONLY
 {
-    dvRelationshipSetAccessChild(dvCurrentRelationship, false);
+    dbRelationshipSetAccessChild(dbCurrentRelationship, false);
 }
 | KWCHILD_ONLY
 {
-    dvRelationshipSetAccessParent(dvCurrentRelationship, false);
+    dbRelationshipSetAccessParent(dbCurrentRelationship, false);
 }
 | KWSPARSE
 {
-    dvRelationshipSetSparse(dvCurrentRelationship, true);
+    dbRelationshipSetSparse(dbCurrentRelationship, true);
 }
 | KWUNORDERED
 {
-    dvRelationshipSetUnordered(dvCurrentRelationship, true);
+    dbRelationshipSetUnordered(dbCurrentRelationship, true);
 }
 ;
 
 upperIdent: IDENT
 {
-    $$ = dvUpperSym($1);
+    $$ = dbUpperSym($1);
 }
 
 %%

@@ -8,9 +8,9 @@ dbModule dbModuleCreate(
     dbModule module = dbModuleAlloc();
     dbBlock block = dbBlockAlloc();
 
-    dbModuleSetName(module, name);
+    dbModuleSetSym(module, name);
     dbModuleSetPrefixSym(module, prefix);
-    dbRootAppendMoule(dbTheRoot, module);
+    dbRootAppendModule(dbTheRoot, module);
     dbModuleAppendBlock(module, block);
     dbModuleSetTopBlock(module, block);
     return module;
