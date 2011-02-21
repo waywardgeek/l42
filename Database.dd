@@ -3,6 +3,8 @@
 module Database db
 
 typedef VoidPtr="NULL"
+typedef ComplexFloat="0.0f"
+typedef ComplexDouble="0.0"
 
 enum VariableType VAR_
     INT
@@ -11,7 +13,7 @@ enum VariableType VAR_
     DOUBLE
     BIT
     BOOL
-    CHAR
+    STRING
     ENUM
     POINTER
     SYM
@@ -123,6 +125,12 @@ enum ExpressionType EXPR_
     INDEX
     DOT
 
+enum OperatorType OP_
+    LEFT_ASSOCIATIVE
+    RIGHT_ASSOCIATIVE
+    BINARY
+    UNARY
+
 class Function
 
 class Block
@@ -150,7 +158,12 @@ class VariableStatement
     Variable variable
 
 class Expression
-    ExpressionType type
+
+class Operator
+    OperatorType type
+    uint8 priority
+
+relationship Root Operator hashed
 
 relationship Module Block:Top
 relationship Module Block doubly_linked mandatory
@@ -176,15 +189,45 @@ relationship Function Variable:Return cascade
 relationship Function Variable:Param hashed cascade
 relationship Function Block cascade
 
+relationship Operator Expresion doubly_linked mandatory
+
 relationship Expression Expression doubly_linked cascade 
 
 schema Parser
 
+enum TokenType TOKEN_
+    KEYWORD
+    NAME
+    EXPRESSION
+    COMMA_EXPRESSIONS
+    ASSIGN_OPERATOR
+    BLOCK
+
 class Rule
 
+class Pattern
+    sym moduleSym
+    sym functionSym
+
 class Token
+    TokenType type
+    bool optional
+    union type
+        sym keywordVal: KEYWORD
+        sym nameVal: NAME
+        Expression expressionVal: EXPRESSION
+        Expression accessExpressionVal: ACCESS_EXPRESSION
+        sym assignOperatorVal: ASSIGN_OPERATOR
+        Block blockVal: BLOCK
+
+relationship Root Rule hashed
+relationship Rule Pattern doubly_linked mandatory
+relationship Pattern Token doubly_linked mandatory
 
 schema Compile
+
+relationship Root Rule hashed
+relationship Rule Token
 
 // A compiled shared library
 class Sharedlib

@@ -1,15 +1,27 @@
-l42: main.o dbdatabase.o
+CFLAGS=-Wall -g -c -DDD_DEBUG
+#CFLAGS=-Wall -O2 -c
+LFLAGS= -g
 
-main.o: main.c db.h dbdatabase.h
-	gcc -g -c main.c
+SOURCE=main.c \
+dbdatabase.c \
+module.c
 
-dbdatabase.o: dbdatabase.c dbdatabase.h
-	gcc -g -c dbdatabase.c
+OBJS=$(patsubst %.c,%.o,$(SOURCE))
+
+all: l42
+
+l42: depends $(OBJS)
+	gcc $(LFLAGS) -DDD_DEBUG -o l42 $(OBJS) -lddutil-dbg
+
+depends:
+	gcc -MM $(CFLAGS) $(SOURCE) > depends
+
+clean:
+	rm -f *.o *database.[ch] l42 depends
 
 dbdatabase.c: dbdatabase.h
 
-dbdatabase.h: Database.dd dbtypedef.h
+dbdatabase.h: Database.dd
 	datadraw Database.dd
 
-clean:
-	rm -f *.o *database.[ch] l42
+-include depends
